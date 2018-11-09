@@ -3,44 +3,50 @@ from horsehivecomment.items import *
 import json
 import scrapy
 from horsehivecomment.utils.Utils import *
+import copy
+
+
 # 解析每个评论链接,得到评论内容,写入到mysql中
 
 class CommentSpider(scrapy.Spider):
     name = 'Comment'
     allowed_domains = ['www.mafengwo.cn']
-    start_urls = []
-    commentListUrlDict = {}
+    commentListUrlDict = {}  # 存储url对应的tag_name
+    urlData = []
+    # 初始化 , 从数据库中拿出10个来做爬虫
+    mysql = MysqlDB()
 
-    commentListUrlPath = 'commentListUrl.txt'
+    def start_requests(self):
+        while (True):
+            if CommentSpider.urlData.__len__() <= 0:
+                CommentSpider.urlData = mysql.select('select * from tag_2 where flag = 0 limit 100',
+                                                     {'id': '', 'tag_name': '', 'hotel_id': '', 'comment_urlpage': '',
+                                                      'flag': ''})
+                if not CommentSpider.urlData:
+                    break
 
-    # 加载评论也链接到start_utls 中
-    with open(commentListUrlPath, 'r', encoding='utf-8') as lines:
-        for line in lines:
-            line = line.strip()
-            urlObj = json.loads(line)
-            start_urls.append(urlObj['commentListUrl'])
-            commentListUrlDict[urlObj['commentListUrl']] = urlObj['tagName']
+                for line in CommentSpider.urlData:
+                    CommentSpider.commentListUrlDict[line['comment_urlpage']] = line['tag_name']
 
-    print('请求的url为>>>')
-    print(start_urls)
+                for url in copy.deepcopy(CommentSpider.urlData):
+                    yield scrapy.Request(url=url['comment_urlpage'], callback=self.parse)
+                    tmpurl = {}
+                    tmpurl['id'] = url['id']
+                    tmpurl['flag'] = '1'
+                    mysql.update(tmpurl, 'tag_2')
+                    CommentSpider.urlData.remove(url)
 
     def parse(self, response):
-        print('当前请求url:' + response.url)
         if not requestError.error(response):  # 请求状态为200
-            print('正常请求')
-            # print(response.text)
             html = (json.loads(response.text))['html']
             for element in scrapy.Selector(text=html).xpath(
-                    '//div[@class="comm-item _j_comment_item"]/div[@class="txt"]'):
+                    '//div[@class="comm-item _j_comment_item"]'):
                 item = CommentItem()
-                item['content'] = element.xpath('text()').extract_first()
-
-                item['tagName'] = CommentSpider.commentListUrlDict[response.url]
-
-                # utils.itemToFile(item, 'commentDetail.txt')
+                item['content'] = element.xpath('div[@class="txt"]/text()').extract_first()
+                item['star'] = element.xpath('div[@class="comm-meta"]/span/@class').extract_first()
+                item['star'] = item['star'][-1]
+                item['tag_name'] = CommentSpider.commentListUrlDict[response.url]
                 yield item
-
-
         else:
             print('请求失败')
 

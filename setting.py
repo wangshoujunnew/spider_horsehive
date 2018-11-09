@@ -11,7 +11,7 @@ DOWNLOADER_MIDDLEWARES = {
 }
 ITEM_PIPELINES = {
    'horsehivecomment.pipelines.CommentPipeline': 300,
-   'horsehivecomment.pipelines.TagPipeline': 300,
+   'horsehivecomment.pipelines.TagPipeline': 299,
    'horsehivecomment.pipelines.HorsehivecommentPipeline': 500,
 }
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'

@@ -3,39 +3,48 @@ import math
 from horsehivecomment.items import *
 from horsehivecomment.utils.Utils import *
 import json
+import scrapy
 import re
+import copy
+
+commentListUrl = 'http://www.mafengwo.cn/hotel/info/comment_list?'  # 评论列表页的前缀
 
 
 # 爬取酒店详情页下面 每个6个topic 项目对应的评论链接
 class TagSpider(scrapy.Spider):
     name = 'Tag'
     allowed_domains = ['www.mafengwo.cn']
-    start_urls = []
-    # 初始化 , 将所有hotel详情页的url加载到start_urls 中
+    urlData = []
+    # 初始化 , 从数据库中拿出10个来做爬虫
+    mysql = MysqlDB()
 
-    with open('E:/horsehivecomment/horsehivecomment/utils/HotelDetailUrl.txt', 'r', encoding='utf-8') as lines:
-        for line in lines:
-            line = line.strip()
-            if line.startswith('--') or line.__len__() <= 0 or line.startswith('下一页点击'):
-                pass
-            else:
-                start_urls.append(line)
+    def start_requests(self):
+        while (True):
+            if TagSpider.urlData.__len__() <= 0:
+                TagSpider.urlData = mysql.select('select * from hotel where flag = 0 limit 100',
+                                                 {'id': '', 'hotel_id': '', 'detail_url': '', 'flag': '',
+                                                  'city_id': ''})
 
-    print('start_urls>>>>>>>>>>>>>')
-    print(start_urls)
+                if not TagSpider.urlData:
+                    break
+
+                for url in copy.deepcopy(TagSpider.urlData):
+                    yield scrapy.Request(url=url['detail_url'], callback=self.parse)
+                    tmpurl = {}
+                    tmpurl['id'] = url['id']
+                    tmpurl['flag'] = '1'
+                    mysql.update(tmpurl, 'hotel')
+                    TagSpider.urlData.remove(url)
 
     def parse(self, response):  # 得到酒店详情页的6个标签
         for tag in response.xpath('//a[@class="_j_comment_keyword"]'):  # **
-            item = TagItem()
             tmpJson = {}
             tmpJson['dataId'] = tag.xpath('@data-id').extract_first()  # *
-            tmpJson['hotelId'] = re.findall('hotel/(\d+).html', response.url)[0]  # *
+            tmpJson['hotel_id'] = re.findall('hotel/(\d+).html', response.url)[0]  # *
             tmpJson['dataType'] = tag.xpath('@data-type').extract_first()  # *
             tmpJson['num'] = tag.xpath('i/text()').extract_first()
             tmpJson['totalNum'] = tag.xpath('span/em/text()').extract_first()  # * 这个标签总点评量 / 10,可以得到页数
-            tmpJson['tagName'] = tag.xpath('strong/text()').extract_first()  # *
-            print(">>>>>>>>>>")
-            # 生成url
+            tmpJson['tag_name'] = tag.xpath('strong/text()').extract_first()  # *
             # var
             # B = {
             #     poi_id: 40046,
@@ -44,51 +53,40 @@ class TagSpider(scrapy.Spider):
             #     page: 1,
             # };
             # 生成每个标签页下面的所有点评list页链接
-            if item['totalNum'] and int(item['totalNum']) > 0:
-                pageTotal = int(math.ceil(float(item['totalNum']) / 10))
+            if tmpJson['totalNum'] and int(tmpJson['totalNum']) > 0:
+                pageTotal = int(math.ceil(float(tmpJson['totalNum']) / 10))
                 # 现在马蜂窝上只提供200条点评的内容
                 if pageTotal > 20:
                     pageTotal = 20
                 for page in range(1, pageTotal + 1):
                     script = '''
-                                var B = { 
-                                    poi_id: %s,
-                                    type: %s,
-                                    keyword_id: %s,
-                                    page: %s,
-                                };
-                                B._ts = new Date().getTime();
-                                var z = window.__MFW_MODULE__.hotel.SignUgifily.getSignV2($.extend({}, B));
-                                B._sn = z 
-                                JSON.stringify(B)
-                                return JSON.stringify(B)
-                                ''' % (item['hotelId'], str(0), item['dataId'], str(page))  # 先默认要一个page = 1的
-                    print('执行js>>>>')
+                    var B = { 
+                        poi_id: %s,
+                        type: %s,
+                        keyword_id: %s,
+                        page: %s,
+                    };
+                    B._ts = new Date().getTime();
+                    var z = window.__MFW_MODULE__.hotel.SignUgifily.getSignV2($.extend({}, B));
+                    B._sn = z 
+                    return JSON.stringify(B)
+                    ''' % (tmpJson['hotel_id'], str(0), tmpJson['dataId'], str(page))
                     result = utils.getJsEnvironment(script=script)  # url=jsurl,
 
                     parameter = json.loads(result)
-                    writeUrl = ''
-                    size = list(parameter.keys()).__len__()
-                    for index, key in zip(range(0, size), parameter.keys()):
-                        if index >= size - 1:
-                            writeUrl += key + '=' + str(parameter[key])
-                        else:
-                            writeUrl += key + '=' + str(parameter[key]) + '&'
+                    comment_urlpage = ''
+                    for key in parameter.keys():
+                        comment_urlpage += key + '=' + str(parameter[key]) + '&'
 
-                    writeUrl = commentListUrl + writeUrl
+                    comment_urlpage = comment_urlpage.rstrip('&')
+
+                    comment_urlpage = commentListUrl + comment_urlpage
 
                     item = TagItem()
-                    item['tagName'] = tmpJson['tagName']
-                    item['commentListUrl'] = writeUrl
+                    item['tag_name'] = tmpJson['tag_name']
+                    item['comment_urlpage'] = comment_urlpage
+                    item['hotel_id'] = tmpJson['hotel_id']
                     yield item  #
             else:
                 pass
-
-# comment_list 页面
-# poi_id:40388 酒店ID
-# type 0 data-type="1"
-# keyword_id:179049854  data-id="106777699"
-# page:1
-# _ts:1540480690525
-# _sn:6771459b45
 
