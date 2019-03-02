@@ -44,32 +44,24 @@ class HorsehivecommentDownloaderMiddleware(object):
         return s
 
     def process_request(self, request, spider):
-        print('--------------------')
         ip = requests.get('http://10.2.3.100:5010/get').text
-
-        print(ip)
+        print('使用代理 = {}. log by sjw ... '.format(ip))
         request.meta['proxy'] = 'http://' + ip  # + proxy_ip # '118.190.95.35:9001'
-        print('使用代理: ' + ip + '>>>>>>>.')
-        # except:
-        #     print('设置代理IP 失败 >>>>>>>>')
         return None
 
     def process_response(self, request, response, spider):
         if response.status == 200:
             return response
 
-        else:  # 如果代理ip > 200个,就删这一个
-            proxyCount = requests.get('http://10.2.3.100:5010/get_all').text.split(',').__len__()
-            if proxyCount >= 200:
-                ip = request.meta['proxy']
-                ip = ip[ip.index('//') + 2:]
-                print('http://10.2.3.100:5010/delete?proxy=' + ip)
-                requests.get('http://10.2.3.100:5010/delete?proxy=' + ip)
-                print('reomve ip from proxy pool: ' + ip)
-            else:
-                # 建立新代理
-                request.meta['proxy'] = requests.get('http://10.2.3.100:5010/get').text
-                return request
+        elif response.status == 404::  # 只删除404状态码的代理
+            ip = request.meta['proxy']
+            ip = ip[ip.index('//') + 2:] # print('http://10.2.3.100:5010/delete?proxy=' + ip)
+            requests.get('http://10.2.3.100:5010/delete?proxy=' + ip)
+            print('reomve ip from proxy pool = {}. log by sjw ... '.format(ip))
+          
+        # 建立新代理
+        request.meta['proxy'] = requests.get('http://10.2.3.100:5010/get').text
+        return request
 
     def process_exception(self, request, exception, spider):
 
