@@ -1,7 +1,7 @@
 BOT_NAME = 'horsehivecomment'
 SPIDER_MODULES = ['horsehivecomment.spiders']
 NEWSPIDER_MODULE = 'horsehivecomment.spiders'
-ROBOTSTXT_OBEY = False
+ROBOTSTXT_OBEY = False # 必须设置为False, 否则baidu都爬不到
 DOWNLOAD_DELAY = 1
 SPIDER_MIDDLEWARES = {
    'horsehivecomment.middlewares.HorsehivecommentSpiderMiddleware': 543,
